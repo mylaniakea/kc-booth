@@ -16,6 +16,8 @@ def get_db():
     finally:
         db.close()
 
+# SSH Keys
+
 @app.post("/ssh-keys/", response_model=schemas.SSHKey)
 def create_ssh_key(ssh_key: schemas.SSHKeyCreate, db: Session = Depends(get_db)):
     db_ssh_key = crud.get_ssh_key_by_name(db, name=ssh_key.name)
@@ -34,6 +36,27 @@ def read_ssh_key(ssh_key_id: int, db: Session = Depends(get_db)):
     if db_ssh_key is None:
         raise HTTPException(status_code=404, detail="SSH key not found")
     return db_ssh_key
+
+# Servers
+
+@app.post("/servers/", response_model=schemas.Server)
+def create_server(server: schemas.ServerCreate, db: Session = Depends(get_db)):
+    db_server = crud.get_server_by_hostname(db, hostname=server.hostname)
+    if db_server:
+        raise HTTPException(status_code=400, detail="Server with this hostname already exists")
+    return crud.create_server(db=db, server=server)
+
+@app.get("/servers/", response_model=List[schemas.Server])
+def read_servers(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    servers = crud.get_servers(db, skip=skip, limit=limit)
+    return servers
+
+@app.get("/servers/{server_id}", response_model=schemas.Server)
+def read_server(server_id: int, db: Session = Depends(get_db)):
+    db_server = crud.get_server(db, server_id=server_id)
+    if db_server is None:
+        raise HTTPException(status_code=404, detail="Server not found")
+    return db_server
 
 @app.get("/")
 async def read_root():
