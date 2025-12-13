@@ -13,9 +13,20 @@ services:
       - ./tests:/app/tests
     environment:
       - PYTHONPATH=/app
+      - DATABASE_URL=postgresql://user:password@postgres/kc-booth-db
       - STEP_PROVISIONER_PASSWORD=password # In a real app, use a secret
     depends_on:
+      - postgres
       - step-ca
+
+  postgres:
+    image: postgres:13
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=kc-booth-db
 
   step-ca:
     image: smallstep/step-ca
@@ -43,7 +54,11 @@ services:
       - ./tests:/app/tests
     environment:
       - PYTHONPATH=/app
+      - DATABASE_URL=postgresql://user:password@postgres/kc-booth-db
+    depends_on:
+      - postgres
     command: pytest
 
 volumes:
+  postgres_data:
   step-ca-data:
