@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
 from .database import Base
 
 class Server(Base):
@@ -18,3 +18,12 @@ class SSHKey(Base):
     name = Column(String, unique=True, index=True)
     public_key = Column(String, unique=True)
     private_key = Column(String) # Will be encrypted
+
+class Certificate(Base):
+    __tablename__ = "certificates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    certificate = Column(String, unique=True)
+    key = Column(String, unique=True)
+    expires_at = Column(DateTime)
+    server_id = Column(Integer, ForeignKey("servers.id"))

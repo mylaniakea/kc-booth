@@ -3,6 +3,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy.orm import Session
 from . import crud, models, schemas, step_ca
 from .database import SessionLocal, engine
+from datetime import datetime, timedelta
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -65,9 +66,29 @@ def get_ca_fingerprint():
     return {"fingerprint": step_ca.get_root_fingerprint()}
 
 @app.post("/ca/issue-certificate")
-def issue_certificate_endpoint(domain: str):
-    cert, key = step_ca.issue_certificate(domain)
+def issue_certificate_endpoint(server_id: int, db: Session = Depends(get_db)):
+    db_server = crud.get_server(db, server_id=server_id)
+    if db_server is None:
+        raise HTTPException(status_code=404, detail="Server not found")
+    
+    cert, key = step_ca.issue_certificate(db_server.hostname)
+    
+    expires_at = datetime.utcnow() + timedelta(days=90) # Certificates are valid for 90 days
+    
+    certificate = schemas.CertificateCreate(
+        certificate=cert,
+        key=key,
+        expires_at=expires_at,
+        server_id=server_id,
+    )
+    crud.create_certificate(db, certificate)
+    
     return {"certificate": cert, "key": key}
+
+@app.get("/certificates/", response_model=List[schemas.Certificate])
+def read_certificates(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    certificates = crud.get_certificates(db, skip=skip, limit=limit)
+    return certificates
 
 @app.get("/")
 async def read_root():

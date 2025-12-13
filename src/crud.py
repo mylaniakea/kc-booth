@@ -46,3 +46,18 @@ def create_server(db: Session, server: schemas.ServerCreate):
     db.commit()
     db.refresh(db_server)
     return db_server
+
+# Certificates
+
+def get_certificate(db: Session, certificate_id: int):
+    return db.query(models.Certificate).filter(models.Certificate.id == certificate_id).first()
+
+def get_certificates(db: Session, skip: int = 0, limit: int = 100):
+    return db.query(models.Certificate).offset(skip).limit(limit).all()
+
+def create_certificate(db: Session, certificate: schemas.CertificateCreate):
+    db_certificate = models.Certificate(**certificate.dict())
+    db.add(db_certificate)
+    db.commit()
+    db.refresh(db_certificate)
+    return db_certificate
