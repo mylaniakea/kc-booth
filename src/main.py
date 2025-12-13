@@ -1,7 +1,7 @@
 from typing import List
 from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy.orm import Session
-from . import crud, models, schemas
+from . import crud, models, schemas, step_ca
 from .database import SessionLocal, engine
 
 models.Base.metadata.create_all(bind=engine)
@@ -57,6 +57,12 @@ def read_server(server_id: int, db: Session = Depends(get_db)):
     if db_server is None:
         raise HTTPException(status_code=404, detail="Server not found")
     return db_server
+
+# CA
+
+@app.get("/ca/fingerprint")
+def get_ca_fingerprint():
+    return {"fingerprint": step_ca.get_root_fingerprint()}
 
 @app.get("/")
 async def read_root():

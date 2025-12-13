@@ -7,6 +7,8 @@ services:
       - "8001:8000"
     volumes:
       - ./src:/app/src
+    environment:
+      - STEP_PROVISIONER_PASSWORD=password # In a real app, use a secret
     depends_on:
       - step-ca
 
@@ -22,6 +24,9 @@ services:
       - DOCKER_STEPCA_INIT_PROVISIONER_PASSWORD=password # In a real app, use a secret
     volumes:
       - step-ca-data:/home/step
+    command:
+      - "step-ca"
+      - "/home/step/config/ca.json"
 
 volumes:
   step-ca-data:
