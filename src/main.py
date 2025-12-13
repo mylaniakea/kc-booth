@@ -64,6 +64,11 @@ def read_server(server_id: int, db: Session = Depends(get_db)):
 def get_ca_fingerprint():
     return {"fingerprint": step_ca.get_root_fingerprint()}
 
+@app.post("/ca/issue-certificate")
+def issue_certificate_endpoint(domain: str):
+    cert, key = step_ca.issue_certificate(domain)
+    return {"certificate": cert, "key": key}
+
 @app.get("/")
 async def read_root():
     return {"message": "Welcome to kc-booth"}
