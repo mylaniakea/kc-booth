@@ -1,6 +1,11 @@
 # Use an official Python runtime as a parent image
 FROM python:3.9-slim
 
+# Install step CLI
+RUN apt-get update && apt-get install -y wget
+RUN wget https://dl.step.sm/gh-release/cli/docs-cli-install/v0.29.0/step-cli_0.29.0-1_amd64.deb
+RUN dpkg -i step-cli_0.29.0-1_amd64.deb
+
 # Set the working directory to /app
 WORKDIR /app
 
