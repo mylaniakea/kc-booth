@@ -1,13 +1,18 @@
 from typing import List
 from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy.orm import Session
-from . import crud, models, schemas, step_ca
+from . import crud, models, schemas, step_ca, scheduler
 from .database import SessionLocal, engine
 from datetime import datetime, timedelta
 
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+
+@app.on_event("startup")
+def startup_event():
+    db = SessionLocal()
+    scheduler.start_scheduler(db)
 
 # Dependency
 def get_db():
