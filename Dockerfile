@@ -15,6 +15,12 @@ COPY requirements.txt .
 # Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install dev dependencies if APP_ENV is set to development
+ARG APP_ENV
+COPY requirements-dev.txt .
+RUN if [ "$APP_ENV" = "development" ] ; then pip install --no-cache-dir -r requirements-dev.txt ; fi
+
+
 # Copy the rest of the application's code into the container at /app
 COPY ./src /app/src
 

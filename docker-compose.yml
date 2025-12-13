@@ -2,12 +2,17 @@ version: '3.8'
 
 services:
   api:
-    build: .
+    build:
+      context: .
+      args:
+        APP_ENV: development
     ports:
       - "8001:8000"
     volumes:
       - ./src:/app/src
+      - ./tests:/app/tests
     environment:
+      - PYTHONPATH=/app
       - STEP_PROVISIONER_PASSWORD=password # In a real app, use a secret
     depends_on:
       - step-ca
@@ -27,6 +32,18 @@ services:
     command:
       - "step-ca"
       - "/home/step/config/ca.json"
+
+  test:
+    build:
+      context: .
+      args:
+        APP_ENV: development
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+    environment:
+      - PYTHONPATH=/app
+    command: pytest
 
 volumes:
   step-ca-data:

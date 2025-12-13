@@ -1,5 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
+from typing import Union
 
 class SSHKeyBase(BaseModel):
     name: str
@@ -10,9 +11,7 @@ class SSHKeyCreate(SSHKeyBase):
 
 class SSHKey(SSHKeyBase):
     id: int
-
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ServerBase(BaseModel):
     hostname: str
@@ -21,14 +20,12 @@ class ServerBase(BaseModel):
 
 class ServerCreate(ServerBase):
     password: str
-    ssh_key_id: int | None = None
+    ssh_key_id: Union[int, None] = None
 
 class Server(ServerBase):
     id: int
-    ssh_key_id: int | None = None
-
-    class Config:
-        orm_mode = True
+    ssh_key_id: Union[int, None] = None
+    model_config = ConfigDict(from_attributes=True)
 
 class CertificateBase(BaseModel):
     certificate: str
@@ -42,6 +39,4 @@ class Certificate(CertificateBase):
     id: int
     expires_at: datetime
     server_id: int
-
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
