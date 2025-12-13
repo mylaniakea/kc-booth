@@ -22,6 +22,12 @@ def get_db():
     finally:
         db.close()
 
+# Health Check
+
+@app.get("/health")
+def health_check():
+    return {"status": "OK"}
+
 # SSH Keys
 
 @app.post("/ssh-keys/", response_model=schemas.SSHKey)
