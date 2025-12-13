@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./src:/app/src
+    depends_on:
+      - step-ca
+
+  step-ca:
+    image: smallstep/step-ca
+    ports:
+      - "9000:9000"
+    environment:
+      - DOCKER_STEPCA_INIT_NAME=kc-booth-ca
+      - DOCKER_STEPCA_INIT_DNS=step-ca,localhost
+      - DOCKER_STEPCA_INIT_ADDRESS=:9000
+      - DOCKER_STEPCA_INIT_PROVISIONER=admin
+      - DOCKER_STEPCA_INIT_PROVISIONER_PASSWORD=password # In a real app, use a secret
+    volumes:
+      - step-ca-data:/home/step
+
+volumes:
+  step-ca-data:
