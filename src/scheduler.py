@@ -103,3 +103,16 @@ def start_scheduler() -> Optional[BackgroundScheduler]:
     except Exception as e:
         logger.error(f"Failed to start scheduler: {e}", exc_info=True)
         return None
+
+
+def stop_scheduler(sched: Optional[BackgroundScheduler]) -> None:
+    """
+    Gracefully stops the scheduler, allowing running jobs to complete.
+    
+    Args:
+        sched: Scheduler instance to stop
+    """
+    if sched is not None:
+        logger.info("Shutting down scheduler, waiting for running jobs to complete...")
+        sched.shutdown(wait=True)
+        logger.info("Scheduler shutdown complete")

@@ -59,14 +59,25 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
+# Store scheduler instance for graceful shutdown
+app_scheduler = None
+
 @app.on_event("startup")
 def startup_event():
+    global app_scheduler
     db = SessionLocal()
     try:
-        scheduler.start_scheduler()
+        app_scheduler = scheduler.start_scheduler()
         print("✓ Scheduler started")
     except Exception as e:
         print(f"✗ Failed to start scheduler: {e}", file=sys.stderr)
+
+@app.on_event("shutdown")
+def shutdown_event():
+    """Gracefully shutdown scheduler on app termination."""
+    global app_scheduler
+    if app_scheduler:
+        scheduler.stop_scheduler(app_scheduler)
 
 # Dependency
 def get_db():
