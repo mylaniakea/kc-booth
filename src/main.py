@@ -8,6 +8,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy.orm import Session
 from . import crud, models, schemas, step_ca, scheduler
 from . import auth, auth_crud, auth_models, auth_schemas
+from . import audit, audit_schemas
 from .database import SessionLocal, engine
 from .config import get_settings
 from .rate_limit import limiter
@@ -36,6 +37,7 @@ except Exception as e:
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
 auth_models.Base.metadata.create_all(bind=engine)
+audit.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="kc-booth", description="SSH key and certificate management for homelabs")
 
@@ -298,3 +300,36 @@ def read_certificates(
 @app.get("/")
 async def read_root():
     return {"message": "Welcome to kc-booth"}
+
+# Audit Log Endpoints
+
+@app.get("/audit/logs/", response_model=List[audit_schemas.AuditLog], tags=["Audit"])
+def get_audit_logs_endpoint(
+    user_id: int = None,
+    resource_type: str = None,
+    action: str = None,
+    limit: int = 100,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    current_user: auth_models.User = Depends(auth.get_current_user)
+):
+    """Get audit logs with optional filters."""
+    return audit.get_audit_logs(
+        db,
+        user_id=user_id,
+        resource_type=resource_type,
+        action=action,
+        limit=limit,
+        offset=offset
+    )
+
+
+@app.get("/audit/resource/{resource_type}/{resource_id}/", response_model=List[audit_schemas.AuditLog], tags=["Audit"])
+def get_resource_audit_trail_endpoint(
+    resource_type: str,
+    resource_id: int,
+    db: Session = Depends(get_db),
+    current_user: auth_models.User = Depends(auth.get_current_user)
+):
+    """Get complete audit trail for a specific resource."""
+    return audit.get_resource_audit_trail(db, resource_type, resource_id)
