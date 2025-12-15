@@ -1,11 +1,16 @@
 """Main FastAPI application for kc-booth."""
 from typing import List
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy.orm import Session
 from . import crud, models, schemas, step_ca, scheduler
 from . import auth, auth_crud, auth_models, auth_schemas
 from .database import SessionLocal, engine
 from .config import get_settings
+from .rate_limit import limiter
 from datetime import datetime, timedelta
 import sys
 
@@ -30,6 +35,21 @@ models.Base.metadata.create_all(bind=engine)
 auth_models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="kc-booth", description="SSH key and certificate management for homelabs")
+
+# Add rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
+# Add security headers middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 @app.on_event("startup")
 def startup_event():
@@ -69,7 +89,9 @@ def create_user(
     return auth_crud.create_user(db=db, user=user)
 
 @app.post("/auth/login", response_model=auth_schemas.APIKeyWithKey, tags=["Authentication"])
+@limiter.limit("5/minute")  # Rate limit: 5 attempts per minute
 def login(
+    request: Request,
     login_request: auth_schemas.LoginRequest,
     db: Session = Depends(get_db)
 ):
