@@ -12,3 +12,4 @@ slowapi
 paramiko
 prometheus-client
 python-json-logger
+pytest
