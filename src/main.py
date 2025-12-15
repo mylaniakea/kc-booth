@@ -3,6 +3,7 @@ from typing import List
 from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy.orm import Session
 from . import crud, models, schemas, step_ca, scheduler
+from . import auth, auth_crud, auth_models, auth_schemas
 from .database import SessionLocal, engine
 from .config import get_settings
 from datetime import datetime, timedelta
@@ -15,6 +16,7 @@ try:
     print(f"  - Database: {settings.database_url.split('@')[-1]}")  # Hide credentials
     print(f"  - Encryption: Enabled")
     print(f"  - Step-CA: {settings.step_ca_url}")
+    print(f"  - Authentication: {'Disabled (dev mode)' if settings.disable_auth else 'Enabled'}")
 except Exception as e:
     print(f"✗ Configuration validation failed: {e}", file=sys.stderr)
     print("\nPlease ensure all required environment variables are set:", file=sys.stderr)
@@ -23,7 +25,9 @@ except Exception as e:
     print("  - STEP_PROVISIONER_PASSWORD", file=sys.stderr)
     sys.exit(1)
 
+# Create database tables
 models.Base.metadata.create_all(bind=engine)
+auth_models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="kc-booth", description="SSH key and certificate management for homelabs")
 
@@ -50,22 +54,121 @@ def get_db():
 def health_check():
     return {"status": "OK"}
 
+# Authentication Endpoints
+
+@app.post("/auth/users/", response_model=auth_schemas.User, tags=["Authentication"])
+def create_user(
+    user: auth_schemas.UserCreate,
+    db: Session = Depends(get_db),
+    current_user: auth_models.User = Depends(auth.get_current_user)
+):
+    """Create a new user (requires authentication)."""
+    db_user = auth_crud.get_user_by_username(db, username=user.username)
+    if db_user:
+        raise HTTPException(status_code=400, detail="Username already exists")
+    return auth_crud.create_user(db=db, user=user)
+
+@app.post("/auth/login", response_model=auth_schemas.APIKeyWithKey, tags=["Authentication"])
+def login(
+    login_request: auth_schemas.LoginRequest,
+    db: Session = Depends(get_db)
+):
+    """Login with username/password and receive an API key."""
+    user = auth.authenticate_user(db, login_request.username, login_request.password)
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect username or password"
+        )
+    
+    # Create a new API key for this login
+    api_key_create = auth_schemas.APIKeyCreate(name=f"Login - {datetime.utcnow().isoformat()}")
+    db_api_key, plaintext_key = auth_crud.create_api_key(db, api_key_create, user.id)
+    
+    # Return the API key with metadata
+    return auth_schemas.APIKeyWithKey(
+        id=db_api_key.id,
+        name=db_api_key.name,
+        user_id=db_api_key.user_id,
+        is_active=db_api_key.is_active,
+        created_at=db_api_key.created_at,
+        last_used_at=db_api_key.last_used_at,
+        key=plaintext_key
+    )
+
+@app.post("/auth/api-keys/", response_model=auth_schemas.APIKeyWithKey, tags=["Authentication"])
+def create_api_key(
+    api_key: auth_schemas.APIKeyCreate,
+    db: Session = Depends(get_db),
+    current_user: auth_models.User = Depends(auth.get_current_user)
+):
+    """Create a new API key for the authenticated user."""
+    db_api_key, plaintext_key = auth_crud.create_api_key(db, api_key, current_user.id)
+    
+    return auth_schemas.APIKeyWithKey(
+        id=db_api_key.id,
+        name=db_api_key.name,
+        user_id=db_api_key.user_id,
+        is_active=db_api_key.is_active,
+        created_at=db_api_key.created_at,
+        last_used_at=db_api_key.last_used_at,
+        key=plaintext_key
+    )
+
+@app.get("/auth/api-keys/", response_model=List[auth_schemas.APIKey], tags=["Authentication"])
+def list_api_keys(
+    db: Session = Depends(get_db),
+    current_user: auth_models.User = Depends(auth.get_current_user)
+):
+    """List all API keys for the authenticated user."""
+    return auth_crud.get_user_api_keys(db, current_user.id)
+
+@app.delete("/auth/api-keys/{key_id}", response_model=auth_schemas.APIKey, tags=["Authentication"])
+def revoke_api_key(
+    key_id: int,
+    db: Session = Depends(get_db),
+    current_user: auth_models.User = Depends(auth.get_current_user)
+):
+    """Revoke (deactivate) an API key."""
+    db_api_key = auth_crud.get_api_key(db, key_id)
+    if not db_api_key:
+        raise HTTPException(status_code=404, detail="API key not found")
+    
+    # Ensure user can only revoke their own keys
+    if db_api_key.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to revoke this API key")
+    
+    return auth_crud.deactivate_api_key(db, key_id)
+
 # SSH Keys
 
-@app.post("/ssh-keys/", response_model=schemas.SSHKey)
-def create_ssh_key(ssh_key: schemas.SSHKeyCreate, db: Session = Depends(get_db)):
+@app.post("/ssh-keys/", response_model=schemas.SSHKey, tags=["SSH Keys"])
+def create_ssh_key(
+    ssh_key: schemas.SSHKeyCreate,
+    db: Session = Depends(get_db),
+    current_user: auth_models.User = Depends(auth.get_current_user)
+):
     db_ssh_key = crud.get_ssh_key_by_name(db, name=ssh_key.name)
     if db_ssh_key:
         raise HTTPException(status_code=400, detail="SSH key with this name already exists")
     return crud.create_ssh_key(db=db, ssh_key=ssh_key)
 
-@app.get("/ssh-keys/", response_model=List[schemas.SSHKey])
-def read_ssh_keys(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+@app.get("/ssh-keys/", response_model=List[schemas.SSHKey], tags=["SSH Keys"])
+def read_ssh_keys(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: auth_models.User = Depends(auth.get_current_user)
+):
     ssh_keys = crud.get_ssh_keys(db, skip=skip, limit=limit)
     return ssh_keys
 
-@app.get("/ssh-keys/{ssh_key_id}", response_model=schemas.SSHKey)
-def read_ssh_key(ssh_key_id: int, db: Session = Depends(get_db)):
+@app.get("/ssh-keys/{ssh_key_id}", response_model=schemas.SSHKey, tags=["SSH Keys"])
+def read_ssh_key(
+    ssh_key_id: int,
+    db: Session = Depends(get_db),
+    current_user: auth_models.User = Depends(auth.get_current_user)
+):
     db_ssh_key = crud.get_ssh_key(db, ssh_key_id=ssh_key_id)
     if db_ssh_key is None:
         raise HTTPException(status_code=404, detail="SSH key not found")
@@ -73,20 +176,33 @@ def read_ssh_key(ssh_key_id: int, db: Session = Depends(get_db)):
 
 # Servers
 
-@app.post("/servers/", response_model=schemas.Server)
-def create_server(server: schemas.ServerCreate, db: Session = Depends(get_db)):
+@app.post("/servers/", response_model=schemas.Server, tags=["Servers"])
+def create_server(
+    server: schemas.ServerCreate,
+    db: Session = Depends(get_db),
+    current_user: auth_models.User = Depends(auth.get_current_user)
+):
     db_server = crud.get_server_by_hostname(db, hostname=server.hostname)
     if db_server:
         raise HTTPException(status_code=400, detail="Server with this hostname already exists")
     return crud.create_server(db=db, server=server)
 
-@app.get("/servers/", response_model=List[schemas.Server])
-def read_servers(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+@app.get("/servers/", response_model=List[schemas.Server], tags=["Servers"])
+def read_servers(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: auth_models.User = Depends(auth.get_current_user)
+):
     servers = crud.get_servers(db, skip=skip, limit=limit)
     return servers
 
-@app.get("/servers/{server_id}", response_model=schemas.Server)
-def read_server(server_id: int, db: Session = Depends(get_db)):
+@app.get("/servers/{server_id}", response_model=schemas.Server, tags=["Servers"])
+def read_server(
+    server_id: int,
+    db: Session = Depends(get_db),
+    current_user: auth_models.User = Depends(auth.get_current_user)
+):
     db_server = crud.get_server(db, server_id=server_id)
     if db_server is None:
         raise HTTPException(status_code=404, detail="Server not found")
@@ -94,12 +210,16 @@ def read_server(server_id: int, db: Session = Depends(get_db)):
 
 # CA
 
-@app.get("/ca/fingerprint")
-def get_ca_fingerprint():
+@app.get("/ca/fingerprint", tags=["Certificate Authority"])
+def get_ca_fingerprint(current_user: auth_models.User = Depends(auth.get_current_user)):
     return {"fingerprint": step_ca.get_root_fingerprint()}
 
-@app.post("/ca/issue-certificate")
-def issue_certificate_endpoint(server_id: int, db: Session = Depends(get_db)):
+@app.post("/ca/issue-certificate", tags=["Certificate Authority"])
+def issue_certificate_endpoint(
+    server_id: int,
+    db: Session = Depends(get_db),
+    current_user: auth_models.User = Depends(auth.get_current_user)
+):
     db_server = crud.get_server(db, server_id=server_id)
     if db_server is None:
         raise HTTPException(status_code=404, detail="Server not found")
@@ -118,8 +238,13 @@ def issue_certificate_endpoint(server_id: int, db: Session = Depends(get_db)):
     
     return {"certificate": cert, "key": key}
 
-@app.get("/certificates/", response_model=List[schemas.Certificate])
-def read_certificates(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+@app.get("/certificates/", response_model=List[schemas.Certificate], tags=["Certificates"])
+def read_certificates(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: auth_models.User = Depends(auth.get_current_user)
+):
     certificates = crud.get_certificates(db, skip=skip, limit=limit)
     return certificates
 

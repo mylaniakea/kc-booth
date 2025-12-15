@@ -44,6 +44,12 @@ class Settings(BaseSettings):
         description="CORS allowed origins (comma-separated)"
     )
     
+    # Authentication configuration
+    disable_auth: bool = Field(
+        default=False,
+        description="Disable authentication (for development/testing only)"
+    )
+    
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
