@@ -12,6 +12,9 @@ from .database import SessionLocal, engine
 from .config import get_settings
 from .rate_limit import limiter
 from datetime import datetime, timedelta
+from . import metrics
+from .metrics import MetricsMiddleware
+from .correlation_middleware import CorrelationIdMiddleware
 import sys
 
 # Validate configuration at startup
@@ -40,6 +43,11 @@ app = FastAPI(title="kc-booth", description="SSH key and certificate management 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+\n# Add correlation ID tracking
+app.add_middleware(CorrelationIdMiddleware)
+
+# Add metrics middleware
+app.add_middleware(MetricsMiddleware)
 
 # Add security headers middleware
 @app.middleware("http")
@@ -55,7 +63,7 @@ async def add_security_headers(request: Request, call_next):
 def startup_event():
     db = SessionLocal()
     try:
-        scheduler.start_scheduler(db)
+        scheduler.start_scheduler()
         print("✓ Scheduler started")
     except Exception as e:
         print(f"✗ Failed to start scheduler: {e}", file=sys.stderr)
@@ -69,6 +77,12 @@ def get_db():
         db.close()
 
 # Health Check
+
+\n# Metrics endpoint (no auth required for monitoring systems)
+@app.get("/metrics")
+def get_metrics():
+    """Prometheus metrics endpoint."""
+    return metrics.metrics_endpoint()
 
 @app.get("/health")
 def health_check():
@@ -89,7 +103,7 @@ def create_user(
     return auth_crud.create_user(db=db, user=user)
 
 @app.post("/auth/login", response_model=auth_schemas.APIKeyWithKey, tags=["Authentication"])
-@limiter.limit("5/minute")  # Rate limit: 5 attempts per minute
+@limiter.limit(settings.rate_limit_login)  # Configurable rate limit
 def login(
     request: Request,
     login_request: auth_schemas.LoginRequest,

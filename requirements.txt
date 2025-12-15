@@ -9,3 +9,6 @@ passlib[bcrypt]
 python-jose[cryptography]
 python-multipart
 slowapi
+paramiko
+prometheus-client
+python-json-logger

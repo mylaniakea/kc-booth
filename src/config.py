@@ -50,6 +50,17 @@ class Settings(BaseSettings):
         description="Disable authentication (for development/testing only)"
     )
     
+    # Rate limiting configuration
+    rate_limit_login: str = Field(
+        default="5/minute",
+        description="Rate limit for login endpoint (format: N/period)"
+    )
+    
+    rate_limit_api: str = Field(
+        default="100/minute",
+        description="Rate limit for API endpoints (format: N/period)"
+    )
+    
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

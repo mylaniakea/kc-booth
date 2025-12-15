@@ -1,42 +1,93 @@
-"""
-Centralized logging configuration for kc-booth.
-
-Provides consistent logging across all modules with proper formatting
-and log levels.
-"""
+"""Centralized logging configuration with correlation IDs and structured logging."""
 import logging
 import sys
+import uuid
+from contextvars import ContextVar
+from pythonjsonlogger import jsonlogger
 from typing import Optional
 
-# Default log format
-LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+# Context variable for request correlation ID
+correlation_id: ContextVar[Optional[str]] = ContextVar('correlation_id', default=None)
 
 
-def get_logger(name: str, level: Optional[int] = None) -> logging.Logger:
+class CorrelationIdFilter(logging.Filter):
+    """Add correlation ID to log records."""
+    
+    def filter(self, record):
+        record.correlation_id = correlation_id.get() or "none"
+        return True
+
+
+class CustomJsonFormatter(jsonlogger.JsonFormatter):
+    """Custom JSON formatter with additional fields."""
+    
+    def add_fields(self, log_record, record, message_dict):
+        super().add_fields(log_record, record, message_dict)
+        log_record['app'] = 'kc-booth'
+        log_record['level'] = record.levelname
+        log_record['logger'] = record.name
+        log_record['correlation_id'] = getattr(record, 'correlation_id', 'none')
+
+
+def setup_logging(json_logs: bool = False) -> logging.Logger:
     """
-    Get a configured logger instance.
+    Configure logging for the application.
     
     Args:
-        name: Name for the logger (usually __name__)
-        level: Optional log level override
-        
+        json_logs: If True, use JSON formatted logs (recommended for production)
+                   If False, use human-readable format (better for development)
+    
     Returns:
-        Configured logger instance
+        Logger instance
     """
-    logger = logging.getLogger(name)
+    logger = logging.getLogger("kc-booth")
+    logger.setLevel(logging.INFO)
     
-    if not logger.handlers:
-        # Console handler
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(logging.Formatter(LOG_FORMAT, DATE_FORMAT))
-        logger.addHandler(handler)
+    # Remove existing handlers
+    logger.handlers = []
     
-    # Set level
-    logger.setLevel(level or logging.INFO)
+    # Create handler
+    handler = logging.StreamHandler(sys.stdout)
+    
+    # Add correlation ID filter
+    handler.addFilter(CorrelationIdFilter())
+    
+    if json_logs:
+        # JSON format for production (easier to parse by log aggregators)
+        formatter = CustomJsonFormatter(
+            '%(asctime)s %(level)s %(logger)s %(correlation_id)s %(message)s'
+        )
+    else:
+        # Human-readable format for development
+        formatter = logging.Formatter(
+            '%(asctime)s [%(levelname)s] [%(correlation_id)s] %(name)s: %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+    
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
     
     return logger
 
 
-# Create default logger for startup messages
-startup_logger = get_logger("kc-booth.startup")
+def get_correlation_id() -> str:
+    """Get current correlation ID or generate a new one."""
+    corr_id = correlation_id.get()
+    if corr_id is None:
+        corr_id = str(uuid.uuid4())
+        correlation_id.set(corr_id)
+    return corr_id
+
+
+def set_correlation_id(corr_id: str) -> None:
+    """Set correlation ID for current context."""
+    correlation_id.set(corr_id)
+
+
+def clear_correlation_id() -> None:
+    """Clear correlation ID from current context."""
+    correlation_id.set(None)
+
+
+# Initialize logger (can be imported by other modules)
+logger = setup_logging()

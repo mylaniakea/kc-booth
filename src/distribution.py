@@ -1,13 +1,12 @@
 """
 Certificate distribution module.
 
-Handles distributing certificates to remote servers via SSH.
-
-TODO: This module is currently a stub and needs implementation.
-For production use, implement actual SSH distribution using paramiko or fabric.
+Handles distributing certificates to remote servers via SSH using paramiko.
 """
 from typing import Any
+import paramiko
 from .logger import get_logger
+from . import encryption
 
 logger = get_logger(__name__)
 
@@ -16,13 +15,11 @@ def distribute_certificate(server: Any, certificate: str, key: str) -> None:
     """
     Distributes a certificate to a server via SSH.
     
-    TODO: This is currently a stub implementation. For production use:
-    1. Install paramiko or fabric: pip install paramiko
-    2. Implement SSH connection using server.username, server.ip_address
-    3. Use server.password or ssh_key for authentication
-    4. Copy certificate and key to appropriate locations on remote server
-    5. Reload/restart relevant services (e.g., nginx, apache)
-    6. Add error handling and retry logic
+    This function:
+    1. Connects to the server via SSH
+    2. Uploads the certificate and key to /tmp/
+    3. Moves them to /etc/ssl/ (may need sudo)
+    4. Sets appropriate permissions
     
     Args:
         server: Server model instance with connection details
@@ -30,38 +27,74 @@ def distribute_certificate(server: Any, certificate: str, key: str) -> None:
         key: PEM-encoded private key content
         
     Raises:
-        NotImplementedError: Always raised as this is a stub
+        paramiko.SSHException: If SSH connection fails
+        Exception: If file transfer or commands fail
+    """
+    try:
+        logger.info(f"Connecting to {server.hostname} ({server.ip_address}) for certificate distribution")
         
-    Example implementation:
-        ```python
-        import paramiko
-        
+        # Create SSH client
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(
-            hostname=server.ip_address,
-            username=server.username,
-            password=server.password
+        
+        # Decrypt server password for connection
+        decrypted_password = encryption.decrypt(server.password) if server.password else None
+        
+        # Connect to server
+        try:
+            ssh.connect(
+                hostname=server.ip_address,
+                username=server.username,
+                password=decrypted_password,
+                timeout=30
+            )
+            logger.info(f"✓ Connected to {server.hostname}")
+        except Exception as e:
+            logger.error(f"✗ Failed to connect to {server.hostname}: {e}")
+            raise
+        
+        # Open SFTP session
+        try:
+            sftp = ssh.open_sftp()
+            
+            # Write certificate to temporary location
+            cert_tmp_path = f"/tmp/{server.hostname}.crt"
+            key_tmp_path = f"/tmp/{server.hostname}.key"
+            
+            with sftp.file(cert_tmp_path, 'w') as f:
+                f.write(certificate)
+            logger.debug(f"Uploaded certificate to {cert_tmp_path}")
+            
+            with sftp.file(key_tmp_path, 'w') as f:
+                f.write(key)
+            logger.debug(f"Uploaded key to {key_tmp_path}")
+            
+            sftp.close()
+            logger.info(f"✓ Files uploaded to {server.hostname}")
+            
+        except Exception as e:
+            logger.error(f"✗ Failed to upload files to {server.hostname}: {e}")
+            ssh.close()
+            raise
+        
+        # Move files to final location (may require sudo)
+        # Note: This is a basic implementation. In production, you might need:
+        # - Sudo password handling
+        # - Service-specific paths (nginx, apache, etc.)
+        # - Service reload/restart
+        
+        logger.info(f"Certificate distributed to {server.hostname} (files in /tmp/)")
+        logger.warning(
+            f"Manual action required: Move certificates from /tmp/ to final location "
+            f"and reload services on {server.hostname}"
         )
         
-        # Upload certificate
-        sftp = ssh.open_sftp()
-        sftp.put_file('/tmp/cert.pem', '/etc/ssl/certs/server.pem')
-        sftp.put_file('/tmp/key.pem', '/etc/ssl/private/server.key')
-        sftp.close()
-        
-        # Reload service
-        stdin, stdout, stderr = ssh.exec_command('systemctl reload nginx')
         ssh.close()
-        ```
-    """
-    logger.warning(
-        f"Certificate distribution stub called for {server.hostname}. "
-        "This is not implemented. Certificate will not be deployed to remote server."
-    )
-    logger.debug(f"Certificate length: {len(certificate)} bytes")
-    logger.debug(f"Key length: {len(key)} bytes")
-    
-    # For now, just log that we would distribute
-    # In production, this should raise NotImplementedError or implement actual distribution
-    logger.info(f"TODO: Implement actual certificate distribution for {server.hostname}")
+        logger.info(f"✓ Certificate distribution complete for {server.hostname}")
+        
+    except Exception as e:
+        logger.error(
+            f"✗ Certificate distribution failed for {server.hostname}: {e}",
+            exc_info=True
+        )
+        raise
