@@ -1,7 +1,9 @@
+"""Certificate rotation scheduler."""
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy.orm import Session
-from . import crud, step_ca, distribution
+from . import crud, step_ca, distribution, schemas
 from datetime import datetime, timedelta
+
 
 def rotate_certificates(db: Session):
     """
@@ -27,6 +29,7 @@ def rotate_certificates(db: Session):
                 distribution.distribute_certificate(db_server, cert, key)
                 
                 print(f"Rotated certificate for {db_server.hostname}")
+
 
 def start_scheduler(db: Session):
     """

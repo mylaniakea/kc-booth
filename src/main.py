@@ -1,18 +1,40 @@
+"""Main FastAPI application for kc-booth."""
 from typing import List
 from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy.orm import Session
 from . import crud, models, schemas, step_ca, scheduler
 from .database import SessionLocal, engine
+from .config import get_settings
 from datetime import datetime, timedelta
+import sys
+
+# Validate configuration at startup
+try:
+    settings = get_settings()
+    print("✓ Configuration validated successfully")
+    print(f"  - Database: {settings.database_url.split('@')[-1]}")  # Hide credentials
+    print(f"  - Encryption: Enabled")
+    print(f"  - Step-CA: {settings.step_ca_url}")
+except Exception as e:
+    print(f"✗ Configuration validation failed: {e}", file=sys.stderr)
+    print("\nPlease ensure all required environment variables are set:", file=sys.stderr)
+    print("  - DATABASE_URL", file=sys.stderr)
+    print("  - ENCRYPTION_KEY (generate with: python3 generate_encryption_key.py)", file=sys.stderr)
+    print("  - STEP_PROVISIONER_PASSWORD", file=sys.stderr)
+    sys.exit(1)
 
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI()
+app = FastAPI(title="kc-booth", description="SSH key and certificate management for homelabs")
 
 @app.on_event("startup")
 def startup_event():
     db = SessionLocal()
-    scheduler.start_scheduler(db)
+    try:
+        scheduler.start_scheduler(db)
+        print("✓ Scheduler started")
+    except Exception as e:
+        print(f"✗ Failed to start scheduler: {e}", file=sys.stderr)
 
 # Dependency
 def get_db():

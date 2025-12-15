@@ -10,6 +10,7 @@ class SSHKeyCreate(SSHKeyBase):
     private_key: str
 
 class SSHKey(SSHKeyBase):
+    """SSH Key response model - private_key is excluded for security."""
     id: int
     model_config = ConfigDict(from_attributes=True)
 
@@ -23,6 +24,7 @@ class ServerCreate(ServerBase):
     ssh_key_id: Union[int, None] = None
 
 class Server(ServerBase):
+    """Server response model - password is excluded for security."""
     id: int
     ssh_key_id: Union[int, None] = None
     model_config = ConfigDict(from_attributes=True)

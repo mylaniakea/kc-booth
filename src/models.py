@@ -8,7 +8,7 @@ class Server(Base):
     hostname = Column(String, unique=True, index=True)
     ip_address = Column(String, unique=True, index=True)
     username = Column(String)
-    password = Column(String) # Will be encrypted
+    password = Column(String)  # Encrypted with Fernet
     ssh_key_id = Column(Integer, ForeignKey("ssh_keys.id"))
 
 class SSHKey(Base):
@@ -17,7 +17,7 @@ class SSHKey(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
     public_key = Column(String, unique=True)
-    private_key = Column(String) # Will be encrypted
+    private_key = Column(String)  # Encrypted with Fernet
 
 class Certificate(Base):
     __tablename__ = "certificates"
