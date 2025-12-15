@@ -46,8 +46,86 @@ class Settings(BaseSettings):
     
     # Authentication configuration
     disable_auth: bool = Field(
+
+    # Testing configuration
+    test_mode: bool = Field(
+
+    # Certificate provider configuration
+    cert_provider: str = Field(
+        default="step-ca",
+        description="Certificate provider (step-ca, openssh, vault, letsencrypt)"
+    )
+    
+    # Vault configuration (if using vault provider)
+    vault_addr: str = Field(
+        default="http://vault:8200",
+        description="HashiCorp Vault address"
+    )
+    vault_token: str = Field(
+        default="",
+        description="Vault authentication token"
+    )
+    vault_ssh_path: str = Field(
+        default="ssh/sign/default",
+        description="Vault SSH signing endpoint path"
+    )
         default=False,
+        description="Enable test mode (self-signed SSH certs, use only for dev/testing)"
+    )
+        default=False,
+
+    # Testing configuration
+    test_mode: bool = Field(
+
+    # Certificate provider configuration
+    cert_provider: str = Field(
+        default="step-ca",
+        description="Certificate provider (step-ca, openssh, vault, letsencrypt)"
+    )
+    
+    # Vault configuration (if using vault provider)
+    vault_addr: str = Field(
+        default="http://vault:8200",
+        description="HashiCorp Vault address"
+    )
+    vault_token: str = Field(
+        default="",
+        description="Vault authentication token"
+    )
+    vault_ssh_path: str = Field(
+        default="ssh/sign/default",
+        description="Vault SSH signing endpoint path"
+    )
+        default=False,
+        description="Enable test mode (self-signed SSH certs, use only for dev/testing)"
+    )
         description="Disable authentication (for development/testing only)"
+
+    # Testing configuration
+    test_mode: bool = Field(
+
+    # Certificate provider configuration
+    cert_provider: str = Field(
+        default="step-ca",
+        description="Certificate provider (step-ca, openssh, vault, letsencrypt)"
+    )
+    
+    # Vault configuration (if using vault provider)
+    vault_addr: str = Field(
+        default="http://vault:8200",
+        description="HashiCorp Vault address"
+    )
+    vault_token: str = Field(
+        default="",
+        description="Vault authentication token"
+    )
+    vault_ssh_path: str = Field(
+        default="ssh/sign/default",
+        description="Vault SSH signing endpoint path"
+    )
+        default=False,
+        description="Enable test mode (self-signed SSH certs, use only for dev/testing)"
+    )
     )
     
     # Rate limiting configuration
